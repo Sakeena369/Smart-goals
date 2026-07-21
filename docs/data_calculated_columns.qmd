@@ -1,0 +1,173 @@
+---
+title: "Smart Goals Model Documentation"
+subtitle: "Model Inputs From FEATURE_CONFIG"
+format:
+  revealjs:
+    theme: simple
+    slide-number: true
+    toc: false
+    scrollable: true
+    width: 1360
+    margin: 0.06
+    css: data_calculated_columns.css
+---
+
+## Scope
+
+This document is limited to data that is ultimately used by the model, based on `FEATURE_CONFIG` in `src/smart_goals/config.py`.
+
+- Included: model input features only
+- Excluded: engineered columns not selected in `FEATURE_CONFIG`
+
+## Model Target
+
+- `SALES_PER_GOAL_HOUR`
+
+This is the prediction target used during training.
+
+## Model Inputs (Exact FEATURE_CONFIG Set)
+
+### Target Encoded Features
+
+- `SALES_ASSOCIATE`
+- `STORE_NUMBER`
+- `CHNL_DESC`
+- `REGION_DESC`
+- `TENURE_BUCKET`
+
+### One-Hot Encoded Features
+
+- `DAY_OF_WEEK`
+
+### Numeric Passthrough Features
+
+- `TENURE_MONTHS_CAPPED_2YR`
+- `LONG_TENURE_X_LOG_TENURE`
+- `LOG_TENURE_MONTHS_CAPPED_2YR`
+- `HOURS_SINCE_OPEN_CORRECTED`
+- `STORE_MANAGER_GOAL`
+- `IS_HOLIDAY_SEASON`
+- `IS_WEEKEND`
+- `IS_LONG_TENURE`
+- `SPGH_2WKS_SMOOTH`
+- `SPGH_4WKS_SMOOTH`
+- `SPGH_8WKS_SMOOTH`
+- `SPGH_16WKS_SMOOTH`
+- `SPGH_32WKS_SMOOTH`
+
+## Preprocessing Overview
+
+Preprocessing happens in two stages:
+
+1. Data readiness filtering and typing (`prepare_data`)
+2. Model transformation (`preprocessing_pipeline`)
+
+## Stage 1: Data Readiness
+
+`prepare_data` enforces training eligibility and schema consistency:
+
+- Keeps rows where:
+  - `GOALS_SCHEDULED_HOURS_CORRECTED` is between `4` and `9`
+  - `STORE_MANAGER_GOAL > 0`
+  - `HOURS_SINCE_OPEN` is not null
+  - `CHNL_DESC` is not null
+- Enforces required columns: date, target, and all `FEATURE_CONFIG` features
+- Applies configured dtypes
+- Sorts by `BUSINESS_DATE`
+
+Executive interpretation:
+
+- This removes structurally invalid observations before model fitting.
+
+## Stage 2: Model Transformations
+
+`ColumnTransformer` applies:
+
+- `TargetEncoder(smooth="auto", cv=3, shuffle=False)` to high-cardinality categories
+- `OneHotEncoder(handle_unknown="ignore", sparse_output=False)` to `DAY_OF_WEEK`
+- Numeric passthrough for all configured numeric features
+
+## Target Encoding: Motivation And Representation
+
+### Why We Use It
+
+- Fields like associate/store/channel have many distinct values.
+- One-hot encoding these fields would create very wide sparse inputs.
+- Wide sparse inputs can reduce stability and increase complexity.
+
+### What It Represents
+
+For each category, target encoding provides a smoothed expected target estimate:
+
+`EncodedValue(category) ~= E[SALES_PER_GOAL_HOUR | category]`
+
+Interpretation:
+
+- Higher value: historically associated with higher sales per goal hour
+- Lower value: historically associated with lower sales per goal hour
+
+### Controls For Risk
+
+- `cv=3`: reduces leakage risk versus naive global means
+- `smooth="auto"`: shrinks noisy categories toward broader averages
+
+Business outcome:
+
+- Keeps identity-level signal while improving generalization.
+
+## Included Engineered Features (Business Meaning)
+
+### Tenure Features Used By Model
+
+- `TENURE_MONTHS_CAPPED_2YR = min(TENURE_MONTHS, 24)`
+- `LOG_TENURE_MONTHS_CAPPED_2YR = log10(TENURE_MONTHS_CAPPED_2YR + 1)`
+- `LONG_TENURE_X_LOG_TENURE = IS_LONG_TENURE * LOG_TENURE`
+- `TENURE_BUCKET` is target-encoded to capture nonlinear tenure effects
+
+### Time-Of-Day And Calendar Features Used By Model
+
+- `HOURS_SINCE_OPEN_CORRECTED`: non-negative hours into the business day
+- `DAY_OF_WEEK`: one-hot encoded weekday signal
+- `IS_HOLIDAY_SEASON`: Nov/Dec seasonality flag
+- `IS_WEEKEND`: weekend flag
+
+### Performance History Features Used By Model
+
+- `SPGH_{2,4,8,16,32}WKS_SMOOTH`: blended short/medium-term associate productivity history
+
+These are stabilized with store priors when associate history is limited.
+
+## Smoothed SPGH Features: Executive View
+
+### Why They Matter
+
+- New associates have limited history.
+- Pure associate history is volatile early.
+- Pure store history is stable but less personalized.
+
+Smoothed SPGH combines both for better early accuracy and stability.
+
+### Plain-English Behavior
+
+- Low exposure history: model leans on store-level baseline
+- More exposure history: model increasingly trusts associate-level trend
+
+### Business Benefit
+
+- Fewer overreactions to short-term noise
+- More stable goal planning
+- Better personalization as evidence accumulates
+
+## Features Explicitly Not In The Model
+
+Examples of engineered columns from data prep that are not currently used as model inputs:
+
+- `GOAL_ATTAIN_PCT_*`
+- `GOAL_ATTAIN_PCT_*_SMOOTH`
+- `SPGH_*_STORE`
+- `EMP_EXPOSURE_HOURS_*`
+- `EMP_WEIGHT_*`
+- `MONTH`, `YEAR`, `WEEK_OF_YEAR`
+- `SHIFT_DURATION`, `MAX_POSSIBLE_HOURS`
+
+Only `FEATURE_CONFIG` determines what enters the model.

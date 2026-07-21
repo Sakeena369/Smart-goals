@@ -1,0 +1,32 @@
+/* Slightly reduce overall text size to prevent overflow on dense slides */
+.reveal .slides section {
+  font-size: 0.9em;
+}
+
+/* Add safe horizontal breathing room so ordered-list numbers are not clipped */
+.reveal .slides section {
+  padding-left: 1.25rem;
+  padding-right: 1rem;
+}
+
+/* Prevent ordered list markers from being cut off on narrower slide layouts */
+.reveal ol,
+.reveal ul {
+  margin-left: 1.1em;
+  padding-left: 0.6em;
+}
+
+/* Allow long inline formulas/identifiers to wrap instead of running off-slide */
+.reveal p code,
+.reveal li code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Keep fenced code blocks readable within slide width */
+.reveal pre code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

@@ -1,0 +1,36 @@
+version: '3'
+
+tasks:
+  data:
+    desc: Run data generation pipeline
+    example: task data -- --format snowflake
+    cmds:
+      - uv run python -m smart_goals.data {{.CLI_ARGS}}
+
+  tune:
+    desc: Run hyperparameter tuning
+    example: task tune -- --n-trials 10
+    cmds:
+      - uv run python -m smart_goals.tune {{.CLI_ARGS}}
+
+  predict:
+    desc: Run prediction
+    example: task predict -- --input data.csv --output predictions.csv
+    cmds:
+      - uv run python -m smart_goals.predict {{.CLI_ARGS}}
+
+  export-onnx:
+    desc: Export an MLflow model to ONNX
+    example: task export-onnx -- --model-version 1 --output-path models/smart_goals.onnx
+    cmds:
+      - uv run python -m smart_goals.export_model {{.CLI_ARGS}}
+
+  pipeline:
+    desc: Run full pipeline (data then tune)
+    vars:
+      DATA_ARGS: '{{.DATA_ARGS | default ""}}'
+      TUNE_ARGS: '{{.TUNE_ARGS | default ""}}'
+    example: task pipeline DATA_ARGS="--format snowflake" TUNE_ARGS="--n-trials 100"
+    cmds:
+      - uv run python -m smart_goals.data {{.DATA_ARGS}}
+      - uv run python -m smart_goals.tune {{.TUNE_ARGS}}
